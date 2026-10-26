@@ -4,27 +4,18 @@ from collections import deque
 from random import choice
 import heapq
 
-# Debug drawing of the notebook: '.' = not walked and not a known wall
-# (it may still hide undiscovered walls).
 def draw_ascii_map(graph, walls=None, target=None):
-    # FIX 2 (original: no guard - `pos in walls` crashed with
-    # the function's OWN default walls=None)
     walls = list(walls) if walls else []
-    # FIX 1 (original: min/max came from graph.keys() ONLY, so the
-    # target and walls outside the walked area vanished from the
-    # drawing - the frame now covers everything the agent knows)
-    seen = set(graph) | set(walls)
+    points_to_draw = set(graph) | set(walls)
     if target is not None:
-        seen.add(target)
-    # guard follows FIX 1 (original: `if not graph:` over the same
-    # concern - drawing nothing when there is nothing known)
-    if not seen:
+        points_to_draw.add(target)
+    if not points_to_draw:
         print("(empty graph)")
         return
-    min_x = min(p[0] for p in seen)  # FIX 1 makes these four take `seen`
-    max_x = max(p[0] for p in seen)
-    min_y = min(p[1] for p in seen)
-    max_y = max(p[1] for p in seen)
+    min_x = min(p[0] for p in points_to_draw)
+    max_x = max(p[0] for p in points_to_draw)
+    min_y = min(p[1] for p in points_to_draw)
+    max_y = max(p[1] for p in points_to_draw)
     print("  ", end="")
     for x in range(min_x, max_x + 1):
         print(f"{x} ", end="")
@@ -243,6 +234,7 @@ class Walker(Agent):
     def update_walls(self, src, sent_graph):
         wall_set = self.get(Belief("Wall_Set", Any))
         old_set = wall_set.values
-        if sent_graph[0] not in old_set:
-            old_set.append(sent_graph[0])
+        # the sender appends each new wall last and resends its whole list
+        if sent_graph[-1] not in old_set:
+            old_set.append(sent_graph[-1])
             wall_set.change(values=old_set)
