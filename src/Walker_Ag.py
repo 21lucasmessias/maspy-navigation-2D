@@ -4,21 +4,34 @@ from collections import deque
 from random import choice
 import heapq
 
+# Debug drawing of the notebook: '.' = not walked and not a known wall
+# (it may still hide undiscovered walls).
 def draw_ascii_map(graph, walls=None, target=None):
-    if not graph:
+    # FIX 2 (original: no guard - `pos in walls` crashed with
+    # the function's OWN default walls=None)
+    walls = list(walls) if walls else []
+    # FIX 1 (original: min/max came from graph.keys() ONLY, so the
+    # target and walls outside the walked area vanished from the
+    # drawing - the frame now covers everything the agent knows)
+    seen = set(graph) | set(walls)
+    if target is not None:
+        seen.add(target)
+    # guard follows FIX 1 (original: `if not graph:` over the same
+    # concern - drawing nothing when there is nothing known)
+    if not seen:
         print("(empty graph)")
         return
-    ys = [x for x, _ in graph.keys()]
-    xs = [y for _, y in graph.keys()]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+    min_x = min(p[0] for p in seen)  # FIX 1 makes these four take `seen`
+    max_x = max(p[0] for p in seen)
+    min_y = min(p[1] for p in seen)
+    max_y = max(p[1] for p in seen)
     print("  ", end="")
-    for x in range(min_y, max_y + 1):
+    for x in range(min_x, max_x + 1):
         print(f"{x} ", end="")
     print()
-    for y in range(min_x, max_x + 1):
+    for y in range(min_y, max_y + 1):
         row = f"{y} "
-        for x in range(min_y, max_y + 1):
+        for x in range(min_x, max_x + 1):
             pos = (x, y)
 
             if pos == target:
