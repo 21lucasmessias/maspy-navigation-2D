@@ -255,6 +255,9 @@ class MenuScreen:
             walls_perc = float(self.inputs[2].text)/100
             agents = int(self.inputs[3].text)
             episodes = int(self.inputs[4].text)
+            if agents < 1:
+                print(f"Simulation needs at least 1 agent (got {agents})")
+                return
             self.settings = ((width, height), walls_perc, agents, episodes)
             self.done = True
         except ValueError:
