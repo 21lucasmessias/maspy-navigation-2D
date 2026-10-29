@@ -255,6 +255,7 @@ class MenuScreen:
             walls_perc = float(self.inputs[2].text)/100
             agents = int(self.inputs[3].text)
             episodes = int(self.inputs[4].text)
+            episodes = episodes if episodes > 0 else None
             self.settings = ((width, height), walls_perc, agents, episodes)
             self.done = True
         except ValueError:
