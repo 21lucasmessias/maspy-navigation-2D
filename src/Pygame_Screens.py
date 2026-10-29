@@ -30,6 +30,10 @@ BG_COLOR = (240, 240, 240)
 GRID_COLOR = (200, 200, 200)
 
 
+def walker_number(group: str) -> str:
+    return group.rsplit("_", 1)[0].removeprefix("wk")
+
+
 # Button - clickable button with hover and callback.
 class Button:
     def __init__(self, rect, text, callback):
@@ -164,9 +168,12 @@ class MapVisualizer:
         x = self.env.map_size[0]*self.cell_size + 20
         y = 250
         lines = [f"Targets: {len(targets)}", f"Captured: {len(captures)}"]
-        for pos, owner in sorted(captures.items(), key=lambda kv: kv[0]):
-            lines.append(f"{owner} -> {pos}")
-        if len(captures) == len(targets):
+        game_over = len(captures) == len(targets)
+        if captures:
+            lines.append("Winners:" if game_over else "Captured by:")
+            for pos, owner in sorted(captures.items(), key=lambda kv: int(walker_number(kv[1]))):
+                lines.append(f"  {walker_number(owner)} -> {pos}")
+        if game_over:
             lines.append("GAME OVER")
         for i, line in enumerate(lines):
             text_surf = FONT.render(line, True, TEXT_COLOR)
@@ -208,7 +215,7 @@ class MapVisualizer:
 
             pygame.draw.rect(self.screen, AGENT_COLOR,
                              (cx - body//2, cy - body//2, body, body))
-            agent_id = percept.group
+            agent_id = walker_number(percept.group)
             font = pygame.font.SysFont(None, body)
             text = font.render(agent_id, True, (255, 255, 255))
             text_rect = text.get_rect(center=(cx, cy))
