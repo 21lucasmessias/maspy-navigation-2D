@@ -45,14 +45,6 @@ Each `Walker` trains Q-learning for the menu's episodes (`0` = no training). Whe
 - Finding the target: the first agent to reach it broadcasts the target and stops.
 - `best_move`: once the target is known, A* over the notebook, one step per cycle and replanned each step. Unknown cells cost more.
 
-## Bug fixes
-
-Fixed in this branch:
-
-- `draw_ascii_map` now covers every known cell and handles `walls=None`.
-- `update_walls` now reads the wall the sender just added.
-- The menu now requires at least 1 agent.
-
 ## Dead code
 
 Never called, kept for reference:
