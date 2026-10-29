@@ -138,18 +138,25 @@ def astar_direction(ag, position, target):
     return direction
 
 class Walker(Agent):
-    def __init__(self, name, map: Environment, episodes: int):
+    def __init__(self, name, map: Environment, episodes: int | None):
         super().__init__(name, max_intentions=1)
         self.filter_perceptions(add, focus, self.my_name)
         #self.show_slct = True
         #self.show_cycle = True
-        model = EnvModel(map, self, True)
-        self.add_policy(model)
-        state = model.env.get(Percept("agt_position", (Any, Any), self.my_name), ck_group=True)
-        assert isinstance(state, Percept)
-        model.initial_states = {"position": [state.values]}
-        #print(f"Agent {self.my_name} starts at {state.values}")
-        model.learn(qlearning, num_episodes=episodes)
+        if episodes is not None:
+            model = EnvModel(map, self, show_learning=True)
+            self.add_policy(model)
+            state = model.env.get(Percept("agt_position", (Any, Any), self.my_name), ck_group=True)
+            assert isinstance(state, Percept)
+            model.initial_states = {"position": [state.values]}
+            print(f"Agent {self.my_name} starts at {state.values}")
+            model.learn(qlearning, num_episodes=episodes)
+            self.print("This process will use the trained model for execution")
+            self.add(Belief("use_learn", adds_event=False))
+        else:
+            self.print("This process will not run the training")
+            self.connect_to(map)
+
         self.reset_knowledge()
     
     def reset_knowledge(self):
@@ -199,7 +206,7 @@ class Walker(Agent):
             
     @pl(gain, Goal("move"), Belief("agt_position", (Any,Any), "Map"))
     def make_move(self, src, position):
-        if self.has(Belief("use_learn")):
+        if self.has(Belief("use_learn", adds_event=False)):
             direction, _ = self.get_best_action("Map",(position,))
             self.print(f"From {position} Moving on a Learned Direction ({direction})")
         else:

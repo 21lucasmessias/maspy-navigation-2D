@@ -258,6 +258,7 @@ class MenuScreen:
             if agents < 1:
                 print(f"Simulation needs at least 1 agent (got {agents})")
                 return
+            episodes = episodes if episodes > 0 else None
             self.settings = ((width, height), walls_perc, agents, episodes)
             self.done = True
         except ValueError:
