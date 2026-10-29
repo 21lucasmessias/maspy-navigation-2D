@@ -1,9 +1,15 @@
+"""
+WALKER_AG.PY - the Walker agent.
+
+Random walk until a target is known, then A* over the notebook. The notebook is shared between walkers by broadcast.
+"""
 from maspy import *
 from maspy.learning import *
-from collections import deque
-from random import choice
-import heapq
+from random import choice      # the random direction of make_move's wandering
+from collections import deque  # used only by reconstruct_path_known (DEAD CODE)
+import heapq  # astar_explore's open set
 
+# Debug drawing of the notebook ('.' = unknown).
 def draw_ascii_map(graph, walls=None, target=None):
     if not graph:
         print("(empty graph)")
@@ -31,6 +37,8 @@ def draw_ascii_map(graph, walls=None, target=None):
                 row += ". "      
         print(row)
 
+
+    # DEAD CODE (never called).
 def reconstruct_path(came_from, current):
     path = []
     while current is not None:
@@ -38,6 +46,7 @@ def reconstruct_path(came_from, current):
         current = came_from[current]
     return path[::-1]
 
+    # DEAD CODE (never called).
 def reconstruct_path_known(start, target, known):
     q = deque([start])
     prev = {start: None}
@@ -54,16 +63,21 @@ def reconstruct_path_known(start, target, known):
                 q.append(nxt)
     return None
 
-def astar_explore(start, goal, known, walls):
-    walls = set(walls)       
+# A* over the notebook; unknown cells cost 1.25.
+def astar_explore(start, goal, known, walls, who=""):
+    walls = set(walls)
     start = tuple(start)
     goal = tuple(goal)
+    tag = f"[astar {who}]" if who else "[astar]"
 
+    # open set (f, cell); came_from rebuilds the path.
     open_set = []
     heapq.heappush(open_set, (0, start))
+    print(f"{tag} start {start} -> goal {goal} | known {len(known)} cells | walls {len(walls)}")
 
     came_from = {}
     g = {start: 0}
+    expanded = 0
 
     def h(p):
         return abs(goal[0] - p[0]) + abs(goal[1] - p[1])
@@ -85,7 +99,9 @@ def astar_explore(start, goal, known, walls):
         return valid
 
     while open_set:
-        _, current = heapq.heappop(open_set)
+        f_cost, current = heapq.heappop(open_set)
+        expanded += 1
+        print(f"{tag} expand {current} g={g[current]} f={f_cost}")
 
         if current == goal:
             path = []
@@ -94,6 +110,7 @@ def astar_explore(start, goal, known, walls):
                 current = came_from[current]
             path.append(start)
             path.reverse()
+            print(f"{tag} goal reached: {len(path)} cells, {expanded} expansions | path {path}")
             return path
 
         known_neighbors = known.get(current, set())
@@ -113,12 +130,14 @@ def astar_explore(start, goal, known, walls):
                 came_from[nxt] = current
                 heapq.heappush(open_set, (new_cost + h(nxt), nxt))
 
+    print(f"{tag} no route: {expanded} expansions")
     return None 
 
+# One move from an A* path.
 def astar_direction(ag, position, target):
     map_graph = ag.get(Belief("Path_Graph", Any))
     wall_set = ag.get(Belief("Wall_Set", Any))
-    path = astar_explore(position, target, map_graph.values, wall_set.values)
+    path = astar_explore(position, target, map_graph.values, wall_set.values, ag.my_name)
     if path is None:
         path = []
     if len(path) > 1:
@@ -131,11 +150,13 @@ def astar_direction(ag, position, target):
         direction = "down" if dy > 0 else "up"
     else:
         direction = "right" if dx > 0 else "left"
+    print(f"[astar_direction {ag.my_name}] path {path} | next cell {path[1] if len(path) > 1 else None} | move {direction}")
     return direction
 
 class Walker(Agent):
     def __init__(self, name, map: Environment, episodes: int):
         super().__init__(name, max_intentions=1)
+        # Perceive only own position; add_policy also connects the map.
         self.filter_perceptions(add, focus, self.my_name)
         #self.show_slct = True
         #self.show_cycle = True
@@ -144,17 +165,19 @@ class Walker(Agent):
         state = model.env.get(Percept("agt_position", (Any, Any), self.my_name), ck_group=True)
         assert isinstance(state, Percept)
         model.initial_states = {"position": [state.values]}
-        #print(f"Agent {self.my_name} starts at {state.values}")
+        # Train synchronously.
         model.learn(qlearning, num_episodes=episodes)
         self.reset_knowledge()
     
+    # Empty notebook + the Goal("move") trigger.
     def reset_knowledge(self):
         self.rm(Belief("Path_Graph", Any))
         self.add(Belief("Path_Graph", dict()))
         self.rm(Belief("Wall_Set", Any))
         self.add(Belief("Wall_Set", []))
         self.add(Goal("move"))
-    
+
+    # Notebook: new edge or bumped wall, then broadcast.
     def update_map(self, position, direction):
         map_graph = self.get(Belief("Path_Graph", Any))
         wall_list = self.get(Belief("Wall_Set", Any))
@@ -178,21 +201,24 @@ class Walker(Agent):
                 self.print(f"Driver {self.my_name} found a wall at {wall_pos} added to {walls}")
                 self.send(broadcast, tell, Belief("Sent_Walls", walls))
 
+    # Once the target is known: one A* step per cycle.
     @pl(gain, Goal("move"), Belief("target", (Any,Any)) & Belief("agt_position", (Any,Any), "Map"))
     def best_move(self, src, target, position):
-        direction = astar_direction(self, position, target) 
+        direction = astar_direction(self, position, target)
         self.print(f'Knowing target {target} and my position {position}  - moving {direction}')
         if direction != "stay": self.move(direction)
         
-        self.perceive("Map") # Manual Perception of Map
-        self.update_map(position, direction) # Update of Map/Wall Beliefs
+        self.perceive("Map")
+        self.update_map(position, direction)
         
         if not self.has(Belief("arrived_target", (Any,Any), "Map")):
-            return False # Retries current event
+            return False
         else:
             self.print(f"Driver {self.my_name} arrived at {target}")
             self.stop_cycle()
+        return False
             
+    # Random step (or learned policy); stop on arrival and broadcast the target.
     @pl(gain, Goal("move"), Belief("agt_position", (Any,Any), "Map"))
     def make_move(self, src, position):
         if self.has(Belief("use_learn")):
@@ -201,20 +227,27 @@ class Walker(Agent):
         else:
             direction = choice(["up", "down", "left", "right"])
             self.print(f"From {position} Moving on a Random Direction ({direction})")
-        self.move(direction) # Move Action
+        self.move(direction)
 
-        self.perceive("Map") # Manual Perception of Map
-        self.update_map(position, direction) # Update of Map/Wall Beliefs
+        self.perceive("Map")
+        self.update_map(position, direction)
             
         if not self.has(Belief("arrived_target", (Any,Any), "Map")):
-            return False # Retries current event 
+            return False
         
         target = self.get(Belief("arrived_target", (Any,Any), "Map"))
         self.print(f"Driver {self.my_name} arrived at {target} first, sending target")
+        map_graph = self.get(Belief("Path_Graph", Any))
+        wall_list = self.get(Belief("Wall_Set", Any))
+        print(f"\n=== notebook of {self.my_name} | "
+              f"{len(map_graph.values)} cells | {len(wall_list.values)} walls found ===")
+        draw_ascii_map(map_graph.values, wall_list.values)
         self.send(broadcast, tell, Belief("target", target.values))
         self.print(f"Driver {self.my_name} finished broadcast")
         self.stop_cycle()
+
     
+    # Merge notebooks received from other walkers.
     @pl(gain, Belief("Sent_Graph", Any), plan_type=atomic)
     def update_graph(self, src, sent_graph):
         map_graph = self.get(Belief("Path_Graph", Any))
@@ -225,11 +258,14 @@ class Walker(Agent):
             else:
                 old_graph[node] |= neighbors
         map_graph.change(values=old_graph)
-    
+
+    # Merge a wall received from other walkers.
     @pl(gain, Belief("Sent_Walls", Any), plan_type=atomic)
     def update_walls(self, src, sent_graph):
         wall_set = self.get(Belief("Wall_Set", Any))
         old_set = wall_set.values
-        if sent_graph[0] not in old_set:
-            old_set.append(sent_graph[0])
+        wall = sent_graph[0]
+        if wall not in old_set:
+            old_set.append(wall)
             wall_set.change(values=old_set)
+            self.print(f"added wall {wall} from {src} | total {len(old_set)}")
