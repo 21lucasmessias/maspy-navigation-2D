@@ -271,13 +271,13 @@ class Walker(Agent):
                 old_graph[node] |= neighbors
         map_graph.change(values=old_graph)
 
-    # Merge a wall received from other walkers.
+    # Merge every wall received from other walkers.
     @pl(gain, Belief("Sent_Walls", Any), plan_type=atomic)
-    def update_walls(self, src, sent_graph):
+    def update_walls(self, src, sent_walls):
         wall_set = self.get(Belief("Wall_Set", Any))
         old_set = wall_set.values
-        wall = sent_graph[-1]
-        if wall not in old_set:
-            old_set.append(wall)
+        new = [w for w in sent_walls if w not in old_set]
+        if new:
+            old_set.extend(new)
             wall_set.change(values=old_set)
-            self.print(f"added wall {wall} from {src} | total {len(old_set)}")
+            self.print(f"added walls {new} from {src} | total {len(old_set)}")

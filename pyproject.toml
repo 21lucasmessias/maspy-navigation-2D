@@ -12,3 +12,9 @@ dependencies = [
     "maspy-gui==2026.5.13.post3",
     "pygame>=2.5",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
